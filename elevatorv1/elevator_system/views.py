@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.response import Response
 from .models import Elevator, Request
 from .serializers import ElevatorSerializer, RequestSerializer
+from .utils import ElevatorUtility
 
 class ElevatorViewSet(viewsets.ModelViewSet):
     queryset = Elevator.objects.all()
@@ -27,14 +28,6 @@ class ElevatorViewSet(viewsets.ModelViewSet):
     def get_direction(self, request, elevator_id=None):
         elevator = self.get_object()
         return Response({'direction': elevator.direction})
-
-    def add_request(self, request, elevator_id=None):
-        elevator = self.get_object()
-        floor = request.data.get('floor')
-        new_request = Request.objects.create(floor=floor)
-        elevator.requests.add(new_request)
-        elevator.save()
-        return Response({'message': f'Request added for {elevator}'})
 
     def mark_maintenance(self, request, elevator_id=None):
         elevator = self.get_object()
@@ -68,6 +61,26 @@ class ElevatorViewSet(viewsets.ModelViewSet):
                 return 2 * (elevator.current_floor - floor)  # Time to reach the bottom floor and then come back up
         else:
             return abs(floor - elevator.current_floor)
+        
+    def request_elevator_to_floor(self, request, elevator_id):
+        elevator = self.get_object()
+        floor = request.data.get('floor_id')
+        curernt_all_requests = elevator.requests.all()
+        existing_floor_list = [req.floor for req in curernt_all_requests]
+        elevatorutil_obj = ElevatorUtility()
+        if floor not in existing_floor_list:
+            floor_list  = elevatorutil_obj.update_list_of_request_in_elevator(elevator, floor, existing_floor_list)
+            # Clear existing requests
+            elevator.requests.clear()
+
+            # Create new Request objects and associate them with the optimal elevator
+            for new_floor in floor_list:
+                new_request = Request.objects.create(floor=new_floor)
+                elevator.requests.add(new_request)
+        elevator.requests.add(new_request)
+        return Response({'message': f'floor added for elevator {elevator}'})
+
+
 
 
 class RequestViewSet(viewsets.ModelViewSet):
@@ -79,14 +92,15 @@ class RequestViewSet(viewsets.ModelViewSet):
         elevators = Elevator.objects.all()
         optimal_elevator = None
         min_time = float('inf')
-
+        elevatorutil_obj = ElevatorUtility()
         for e in elevators:
-            time = self.calculate_time_to_reach_floor(e, floor)
+            time = elevatorutil_obj.calculate_time_to_reach_floor(e, floor)
             if time < min_time:
                 min_time = time
                 optimal_elevator = e
 
         return optimal_elevator
+    
     
 
     def add_request_for_floor(self, request, floor_id):
@@ -96,8 +110,9 @@ class RequestViewSet(viewsets.ModelViewSet):
         if has_requests:
             all_requests = optimal_elevator.requests.all()
             existing_floor_list = [req.floor for req in all_requests]
+            elevatorutil_obj = ElevatorUtility()
             if floor_id not in existing_floor_list:
-                floor_list  = self.update_list_of_request_in_elevator(optimal_elevator, floor_id, existing_floor_list)
+                floor_list  = elevatorutil_obj.update_list_of_request_in_elevator(optimal_elevator, floor_id, existing_floor_list)
             # Clear existing requests
             optimal_elevator.requests.clear()
 
@@ -112,45 +127,46 @@ class RequestViewSet(viewsets.ModelViewSet):
         return Response({'message': f'Request added for {optimal_elevator}'})
 
 
-    def update_list_of_request_in_elevator(self, optimal_elevator, floor_requested, floor_list):
-        optimal_current_floor = optimal_elevator.current_floor
-        optimal_direction = optimal_elevator.direction
-        if optimal_current_floor not in floor_list:
-            floor_list.insert(0, optimal_current_floor)
+    # def update_list_of_request_in_elevator(self, optimal_elevator, floor_requested, floor_list):
+    #     optimal_current_floor = optimal_elevator.current_floor
+    #     optimal_direction = optimal_elevator.direction
+    #     if optimal_current_floor not in floor_list:
+    #         floor_list.insert(0, optimal_current_floor)
 
-        if floor_requested in floor_list:
-            return floor_list
+    #     if floor_requested in floor_list:
+    #         return floor_list
 
-        if len(floor_list) == 0:
-                floor_list.append(floor_requested)
-        elif floor_requested >= floor_list[0]:
-            index = 0
-            while index < len(floor_list) and floor_requested >= floor_list[index]:
-                index += 1
-            floor_list.insert(index, floor_requested)
-        else:
-            index = 0
-            while index < len(floor_list) and floor_requested <= floor_list[index]:
-                index += 1
-            floor_list.insert(index, floor_requested)
+    #     if len(floor_list) == 0:
+    #             floor_list.append(floor_requested)
+    #     elif floor_requested >= floor_list[0]:
+    #         index = 0
+    #         while index < len(floor_list) and floor_requested >= floor_list[index]:
+    #             index += 1
+    #         floor_list.insert(index, floor_requested)
+    #     else:
+    #         index = 0
+    #         while index < len(floor_list) and floor_requested <= floor_list[index]:
+    #             index += 1
+    #         floor_list.insert(index, floor_requested)
 
-        return floor_list
+    #     return floor_list
+    
 
 
     
-    def calculate_time_to_reach_floor(self, elevator, floor):
-        if elevator.direction == 'up':
-            if floor >= elevator.current_floor:
-                return abs(floor - elevator.current_floor)
-            else:
-                return 2 * (elevator.current_floor - floor)  # Time to reach the top floor and then come back down
-        elif elevator.direction == 'down':
-            if floor <= elevator.current_floor:
-                return abs(floor - elevator.current_floor)
-            else:
-                return 2 * (elevator.current_floor - floor)  # Time to reach the bottom floor and then come back up
-        else:
-            return abs(floor - elevator.current_floor)
+    # def calculate_time_to_reach_floor(self, elevator, floor):
+    #     if elevator.direction == 'up':
+    #         if floor >= elevator.current_floor:
+    #             return abs(floor - elevator.current_floor)
+    #         else:
+    #             return 2 * (elevator.current_floor - floor)  # Time to reach the top floor and then come back down
+    #     elif elevator.direction == 'down':
+    #         if floor <= elevator.current_floor:
+    #             return abs(floor - elevator.current_floor)
+    #         else:
+    #             return 2 * (elevator.current_floor - floor)  # Time to reach the bottom floor and then come back up
+    #     else:
+    #         return abs(floor - elevator.current_floor)
 
 class AddElevatorView(viewsets.ModelViewSet):
     def new_elevator(self, request):
@@ -185,3 +201,9 @@ class ReinitializeElevatorSystemView(viewsets.ModelViewSet):
             elevator.save()
 
         return Response({"message": "Elevator system reinitialized successfully."})
+    
+    def hard_reset(self, request):
+        # Delete all elevator objects and associated requests
+        Elevator.objects.all().delete()
+
+        return Response({"message": "Elevator system hard reset completed."})
