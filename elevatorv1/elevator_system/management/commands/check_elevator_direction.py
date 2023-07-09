@@ -13,6 +13,10 @@ class ElevatorThread(threading.Thread):
             current_floor = self.elevator.current_floor
             direction = self.elevator.direction
             requests = self.elevator.requests.all()
+            status = self.elevator.status
+            if status == "maintenance":
+                print(f"Elevator {self.elevator.elevator_id} - Elevator under maintenance")
+                continue
 
 
             print(f"Elevator {self.elevator.elevator_id} - Current Floor: {current_floor}, Direction: {direction}")
@@ -41,9 +45,12 @@ class Command(BaseCommand):
         threads = []
 
         for elevator in elevators:
-            thread = ElevatorThread(elevator)
-            threads.append(thread)
-            thread.start()
+            if elevator.status != "maintenance":
+                thread = ElevatorThread(elevator)
+                threads.append(thread)
+                thread.start()
+            else:
+                print(f"Elevator {elevator.elevator_id} - Under Maintenance")
 
         for thread in threads:
             thread.join()
