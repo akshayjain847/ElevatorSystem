@@ -16,7 +16,7 @@ class Elevator(models.Model):
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='stopped')
     current_floor = models.IntegerField(default=1)
     direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, default='stopped')
-    requests = models.ManyToManyField('Request', related_name='elevators')
+    requests = models.ManyToManyField('Request')
     elevator_id = models.AutoField(primary_key=True)
 
     def move_up(self):
@@ -55,7 +55,6 @@ class Elevator(models.Model):
 
 class Request(models.Model):
     floor = models.IntegerField()
-    elevator_id = models.IntegerField()
 
     def __str__(self):
-        return f"Request {self.elevator_id}"
+        return f"Request {self.floor}"
